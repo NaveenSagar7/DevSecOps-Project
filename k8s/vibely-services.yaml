@@ -1,0 +1,438 @@
+# ==============================================================
+# vibely Blog Platform - Kubernetes Manifest (Single File)
+# Includes: Namespace, Secrets, PVC (EBS), DB, Backend, Frontend
+# ==============================================================
+
+# ---- Namespace ----
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vibely
+  labels:
+    app.kubernetes.io/part-of: vibely
+
+---
+# ---- Database Secret ----
+# In production, use External Secrets Operator or Sealed Secrets.
+# This is base64 encoded for demo purposes.
+# echo -n 'vibely_user' | base64 → dmliZWx5X3VzZXI==
+# echo -n 'vibely_pass' | base64 → dmliZWx5X3Bhc3M=
+# echo -n 'vibely_db' | base64 → dmliZWx5X2Ri
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vibely-db-secret
+  namespace: vibely
+  labels:
+    app.kubernetes.io/part-of: vibely
+type: Opaque
+data:
+  POSTGRES_USER: dmliZWx5X3VzZXI=
+  POSTGRES_PASSWORD: dmliZWx5X3Bhc3M=
+  POSTGRES_DB: dmliZWx5X2Ri
+
+---
+# ---- EBS StorageClass (gp3) ----
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: vibely-ebs-sc
+# provisioner: ebs.csi.eks.amazonaws.com
+# parameters:
+#   type: gp3
+#   encrypted: "true"
+# reclaimPolicy: Retain
+# volumeBindingMode: WaitForFirstConsumer
+# allowVolumeExpansion: true
+
+# ---
+# # ---- PersistentVolumeClaim for PostgreSQL (EBS) ----
+
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: vibely-db-pvc
+#   namespace: vibely
+#   labels:
+#     app.kubernetes.io/part-of: vibely
+#     app.kubernetes.io/component: database
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   storageClassName: vibely-ebs-sc
+#   resources:
+#     requests:
+#       storage: 10Gi
+
+# ---- PersistentVolume for PostgreSQL (Local) ----
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: vibely-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /tmp/vibely-data
+
+---
+# ---- PersistentVolumeClaim for PostgreSQL (Local) ----
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vibely-db-pvc
+  namespace: vibely
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+
+---
+# ---- PostgreSQL Deployment ----
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vibely-db
+  namespace: vibely
+  labels:
+    app.kubernetes.io/name: vibely-db
+    app.kubernetes.io/part-of: vibely
+    app.kubernetes.io/component: database
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # Required for RWO volumes
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vibely-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vibely-db
+        app.kubernetes.io/part-of: vibely
+        app.kubernetes.io/component: database
+    spec:
+      # Security: don't automount service account token (DB doesn't need K8s API)
+      automountServiceAccountToken: false
+      tolerations:
+        - key: "karpenter.sh/disrupted"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: postgres
+          image: naveen352/vibely-db:1.0
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: vibely-db-secret
+          volumeMounts:
+            - name: db-storage
+              mountPath: /var/lib/postgresql/data
+              #subPath: pgdata
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # Security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # Postgres needs write access
+            runAsNonRoot: false            # Postgres image runs initdb as root then drops
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "vibely_user", "-d", "vibely_db"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "vibely_user", "-d", "vibely_db"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: db-storage
+          persistentVolumeClaim:
+            claimName: vibely-db-pvc
+
+---
+# ---- PostgreSQL Service (ClusterIP — internal only) ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: vibely-db
+  namespace: vibely
+  labels:
+    app.kubernetes.io/name: vibely-db
+    app.kubernetes.io/part-of: vibely
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vibely-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+
+---
+# ---- Backend Deployment ----
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vibely-backend
+  namespace: vibely
+  labels:
+    app.kubernetes.io/name: vibely-backend
+    app.kubernetes.io/part-of: vibely
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vibely-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vibely-backend
+        app.kubernetes.io/part-of: vibely
+        app.kubernetes.io/component: backend
+    spec:
+      automountServiceAccountToken: false
+      tolerations:
+        - key: "karpenter.sh/disrupted"
+          operator: "Exists"
+          effect: "NoSchedule"
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for vibely-db:5432..."
+              until nc -z vibely-db 5432; do
+                echo "DB not ready, retrying in 3s..."
+                sleep 3
+              done
+              echo "DB is ready!"
+      containers:
+        - name: backend
+          image: naveen352/vibely-backend:1.0
+          ports:
+            - containerPort: 5000
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "5000"
+            - name: DB_HOST
+              value: "vibely-db"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: vibely-db-secret
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibely-db-secret
+                  key: POSTGRES_PASSWORD
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: vibely-db-secret
+                  key: POSTGRES_DB
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          # Security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+
+---
+# ---- Backend Service (ClusterIP — internal only) ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: vibely-backend
+  namespace: vibely
+  labels:
+    app.kubernetes.io/name: vibely-backend
+    app.kubernetes.io/part-of: vibely
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vibely-backend
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
+
+---
+# ---- Frontend Deployment ----
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vibely-frontend
+  namespace: vibely
+  labels:
+    app.kubernetes.io/name: vibely-frontend
+    app.kubernetes.io/part-of: vibely
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vibely-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vibely-frontend
+        app.kubernetes.io/part-of: vibely
+        app.kubernetes.io/component: frontend
+    spec:
+      automountServiceAccountToken: false
+      tolerations:
+        - key: "karpenter.sh/disrupted"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: frontend
+          image: naveen352/vibely-frontend:1.0
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # Nginx needs write for cache/pid
+            runAsNonRoot: true
+            runAsUser: 101 # nginx user UID in alpine
+            capabilities:
+              drop:
+                - ALL
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+
+---
+# ---- Frontend Service (NodePort — for access via port-forward or node IP) ----
+# NOTE: Changed from LoadBalancer because this AWS account does not support
+# creating load balancers. Use `kubectl port-forward svc/vibely-frontend 8080:80 -n vibely`
+# to access the frontend locally.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vibely-frontend
+  namespace: vibely
+  labels:
+    app.kubernetes.io/name: vibely-frontend
+    app.kubernetes.io/part-of: vibely
+    app.kubernetes.io/component: frontend
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: vibely-frontend
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+
+---
+# ---- NetworkPolicy: DB only accepts traffic from Backend ----
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vibely-db-allow-backend-only
+  namespace: vibely
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vibely-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vibely-backend
+      ports:
+        - port: 5432
+          protocol: TCP
+
+---
+# ---- NetworkPolicy: Backend accepts traffic from Frontend only ----
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vibely-backend-allow-frontend-only
+  namespace: vibely
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vibely-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vibely-frontend
+      ports:
+        - port: 5000
+          protocol: TCP
+          
