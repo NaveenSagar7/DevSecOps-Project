@@ -34,20 +34,20 @@ function Home() {
   return (
     <div>
       <div className="home-header">
-        <h1>Welcome to Jerney 🛤️</h1>
-        <p>A blog platform for the main characters. Share your thoughts, vibes, and hot takes.</p>
+        <h1>Welcome to Vibely 🛤️</h1>
+        <p>A space to share ideas, stories, and everything in between.</p>
         <div className="vibe-tags">
-          <span className="vibe-tag">✨ no cap content</span>
-          <span className="vibe-tag">🔥 hot takes</span>
-          <span className="vibe-tag">💎 real ones only</span>
+          <span className="vibe-tag">🚀 tech stories</span>
+          <span className="vibe-tag">💡 fresh ideas</span>
+          <span className="vibe-tag">🔐 devsecops</span>
         </div>
       </div>
 
       {posts.length === 0 ? (
         <div className="empty-state">
           <div className="empty-emoji">📝</div>
-          <h3>No posts yet, bestie</h3>
-          <p>Be the first to share your thoughts on this journey</p>
+          <h3>The feed is waiting for you 🌟</h3>
+          <p>Publish the first post and spark the discussion.</p>
           <Link to="/create" className="btn btn-primary">
             <HiPlus size={18} />
             Write something

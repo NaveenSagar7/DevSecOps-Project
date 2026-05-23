@@ -3,13 +3,13 @@
    ============================================ */
 
 :root {
-  --bg-dark: #0a0a1a;
+  --bg-dark: #071a2f;
   --bg-card: rgba(20, 20, 45, 0.7);
   --bg-card-hover: rgba(30, 30, 60, 0.8);
   --glass: rgba(255, 255, 255, 0.03);
   --glass-border: rgba(139, 92, 246, 0.15);
-  --accent-purple: #8b5cf6;
-  --accent-pink: #ec4899;
+  --accent-purple: #0ea5e9;
+  --accent-pink: #06b6d4;
   --accent-blue: #3b82f6;
   --accent-cyan: #06b6d4;
   --accent-green: #10b981;
@@ -18,7 +18,7 @@
   --text-primary: #f0f0ff;
   --text-secondary: #a0a0c0;
   --text-muted: #6b6b8a;
-  --gradient-1: linear-gradient(135deg, #8b5cf6, #ec4899);
+  --gradient-1: linear-gradient(135deg, #0ea5e9, #06b6d4);
   --gradient-2: linear-gradient(135deg, #3b82f6, #06b6d4);
   --gradient-3: linear-gradient(135deg, #ec4899, #f97316);
   --radius-sm: 12px;

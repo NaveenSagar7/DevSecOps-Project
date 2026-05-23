@@ -338,6 +338,7 @@ spec:
       containers:
         - name: frontend
           image: naveen352/vibely-frontend:1.0
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               protocol: TCP
