@@ -230,7 +230,7 @@ spec:
               echo "DB is ready!"
       containers:
         - name: backend
-          image: naveen352/vibely-backend:1.0
+          image: ghcr.io/NaveenSagar7/DevSecOps-Project/vibely-backend:4a5ec1b
           ports:
             - containerPort: 5000
               protocol: TCP
@@ -337,7 +337,7 @@ spec:
           effect: "NoSchedule"
       containers:
         - name: frontend
-          image: naveen352/vibely-frontend:1.0
+          image: ghcr.io/NaveenSagar7/DevSecOps-Project/vibely-frontend:4a5ec1b
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
