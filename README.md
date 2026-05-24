@@ -2,7 +2,7 @@
 This repository demonstrates security of every aspect in DevOps Engineering.
 
 
-# For all security aspects of tools , switch to learnings branch in this repo 
+For all security aspects of tools , switch to learnings branch in this repo 
 git checkout learnings
 
 # 🛤️ Vibely — Blog Platform
