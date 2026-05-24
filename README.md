@@ -2,6 +2,9 @@
 This repository demonstrates security of every aspect in DevOps Engineering.
 
 
+# For all security aspects of tools , switch to learnings branch in this repo 
+git checkout learnings
+
 # 🛤️ Vibely — Blog Platform
 
 A  blog platform built with a 3-tier architecture — React frontend, Node.js backend, and PostgreSQL database.
