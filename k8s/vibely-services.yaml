@@ -33,6 +33,7 @@ data:
   POSTGRES_DB: dmliZWx5X2Ri
 
 ---
+
 # ---- EBS StorageClass (gp3) ----
 # apiVersion: storage.k8s.io/v1
 # kind: StorageClass
@@ -210,6 +211,8 @@ spec:
         app.kubernetes.io/part-of: vibely
         app.kubernetes.io/component: backend
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       automountServiceAccountToken: false
       tolerations:
         - key: "karpenter.sh/disrupted"
@@ -231,6 +234,7 @@ spec:
       containers:
         - name: backend
           image: ghcr.io/NaveenSagar7/DevSecOps-Project/vibely-backend:4a5ec1b
+
           ports:
             - containerPort: 5000
               protocol: TCP
@@ -330,6 +334,8 @@ spec:
         app.kubernetes.io/part-of: vibely
         app.kubernetes.io/component: frontend
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       automountServiceAccountToken: false
       tolerations:
         - key: "karpenter.sh/disrupted"

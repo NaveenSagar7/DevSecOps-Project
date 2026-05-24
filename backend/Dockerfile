@@ -12,7 +12,7 @@ WORKDIR /app
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-RUN apk --no-cache add dumb-init
+RUN apk --no-cache add dumb-init=1.2.5-r3
 
 COPY --from=build /app/node_modules ./node_modules
 
